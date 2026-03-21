@@ -30,7 +30,7 @@ use raylib::prelude::*;
 ///   2. The pw_shell field from the passwd database
 ///   3. /bin/sh as a last resort
 fn pty_spawn(cols: u16, rows: u16) -> io::Result<(OwnedFd, libc::pid_t)> {
-    let ws = libc::winsize {
+    let mut ws = libc::winsize {
         ws_row: rows,
         ws_col: cols,
         ws_xpixel: 0,
@@ -45,7 +45,7 @@ fn pty_spawn(cols: u16, rows: u16) -> io::Result<(OwnedFd, libc::pid_t)> {
             &mut master_fd,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &ws,
+            &mut ws,
         )
     };
 
