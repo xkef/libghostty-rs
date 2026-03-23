@@ -13,8 +13,8 @@
 //!
 //! You can adapt the existing, unstable `Allocator` API into a
 //! [libghostty-friendly allocator](alloc::Allocator) via its `From`
-//! implementation. Note that the `'alloc` lifetime must live longer
-//! than the `Allocator` instance itself.
+//! implementation. Note that the `'alloc` lifetime must at least
+//! live as long as the `Allocator` instance itself.
 //!
 //! # Thread safety
 //!
@@ -27,81 +27,26 @@ use std::marker::PhantomData;
 use std::ptr::NonNull;
 
 pub mod alloc;
+pub mod build_info;
 pub mod error;
 pub mod fmt;
 pub mod osc;
+pub mod paste;
+pub mod render;
 pub mod sgr;
+pub mod style;
 pub mod terminal;
 
 #[doc(inline)]
-pub use terminal::Terminal;
+pub use crate::{
+    error::Error,
+    render::RenderState,
+    terminal::{Options as TerminalOptions, Terminal},
+};
 
-use crate::error::{Error, from_result, from_result_with_len};
+use crate::error::{from_result, from_result_with_len};
 
 pub const EXPORTED_API_SYMBOLS: &[&str] = ffi::EXPORTED_API_SYMBOLS;
-
-// ---------------------------------------------------------------------------
-// SgrParser
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Paste utility
-// ---------------------------------------------------------------------------
-
-pub fn paste_is_safe(data: &str) -> bool {
-    unsafe { ffi::ghostty_paste_is_safe(data.as_ptr().cast(), data.len()) }
-}
-
-// ---------------------------------------------------------------------------
-// Build info
-// ---------------------------------------------------------------------------
-
-pub fn build_info_simd() -> Result<bool, Error> {
-    let mut value = false;
-    let result = unsafe {
-        ffi::ghostty_build_info(
-            ffi::GhosttyBuildInfo_GHOSTTY_BUILD_INFO_SIMD,
-            std::ptr::from_mut(&mut value).cast(),
-        )
-    };
-    from_result(result)?;
-    Ok(value)
-}
-
-pub fn build_info_kitty_graphics() -> Result<bool, Error> {
-    let mut value = false;
-    let result = unsafe {
-        ffi::ghostty_build_info(
-            ffi::GhosttyBuildInfo_GHOSTTY_BUILD_INFO_KITTY_GRAPHICS,
-            std::ptr::from_mut(&mut value).cast(),
-        )
-    };
-    from_result(result)?;
-    Ok(value)
-}
-
-pub fn build_info_tmux_control_mode() -> Result<bool, Error> {
-    let mut value = false;
-    let result = unsafe {
-        ffi::ghostty_build_info(
-            ffi::GhosttyBuildInfo_GHOSTTY_BUILD_INFO_TMUX_CONTROL_MODE,
-            std::ptr::from_mut(&mut value).cast(),
-        )
-    };
-    from_result(result)?;
-    Ok(value)
-}
-
-pub fn build_info_optimize() -> Result<ffi::GhosttyOptimizeMode, Error> {
-    let mut value: ffi::GhosttyOptimizeMode = ffi::GhosttyOptimizeMode_GHOSTTY_OPTIMIZE_DEBUG;
-    let result = unsafe {
-        ffi::ghostty_build_info(
-            ffi::GhosttyBuildInfo_GHOSTTY_BUILD_INFO_OPTIMIZE,
-            std::ptr::from_mut(&mut value).cast(),
-        )
-    };
-    from_result(result)?;
-    Ok(value)
-}
 
 // ---------------------------------------------------------------------------
 // Focus encode
