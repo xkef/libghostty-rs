@@ -634,10 +634,10 @@ fn handle_mouse_input<'alloc>(
         // Check whether any mouse tracking mode is enabled.  If so,
         // the application wants to handle scroll events itself.
         let is_mouse_tracking = [
-            Mode::X10Mouse,
-            Mode::NormalMouse,
-            Mode::ButtonMouse,
-            Mode::AnyMouse,
+            Mode::X10_MOUSE,
+            Mode::NORMAL_MOUSE,
+            Mode::BUTTON_MOUSE,
+            Mode::ANY_MOUSE,
         ]
         .into_iter()
         .any(|mode| matches!(terminal.mode(mode), Ok(true)));

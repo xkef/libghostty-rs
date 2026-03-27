@@ -6,11 +6,12 @@
 //!
 //!  1. Create an encoder instance with [`Encoder::new`].
 //!  2. Configure encoder options with the various `Encoder::with_*` methods
-//!     or [`Encoder::with_options_from_terminal`].
+//!     or [`Encoder::set_options_from_terminal`].
 //!  3. For each mouse event:
 //!     *  Create a mouse event with [`Event::new`] (or reuse an old one).
 //!     *  Set event properties (action, button, modifiers, position).
-//!     *  Encode with [`Encoder::encode`].
+//!     *  Encode with [`Encoder::encode_to_vec`] (with a growable `Vec` buffer)
+//!        or [`Encoder::encode`] (with a fixed byte buffer).
 
 use std::mem::MaybeUninit;
 

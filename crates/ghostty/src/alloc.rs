@@ -23,7 +23,7 @@ use crate::{
 ///
 /// One example of a custom allocator that *does* have a `'static`
 /// lifetime is Rust's own default allocator, which can also be used
-/// within libghostty as `Self::GLOBAL`.
+/// within libghostty as [`Allocator::GLOBAL`].
 pub struct Allocator<'ctx, Ctx: 'ctx = ()> {
     pub(crate) inner: GhosttyAllocator,
     _phan: PhantomData<&'ctx Ctx>,

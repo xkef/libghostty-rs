@@ -19,7 +19,7 @@ pub use ffi::GhosttySizeReportSize as SizeReportSize;
 /// scrollback, cursor, styles, modes, and VT stream processing.
 ///
 /// Once a terminal session is up and running, you can configure a key encoder
-/// to write keyboard input via [`crate::key::Encoder::with_options_from_terminal`].
+/// to write keyboard input via [`key::Encoder::set_options_from_terminal`].
 ///
 /// # Effects
 ///
@@ -186,7 +186,7 @@ impl<'alloc: 'cb, 'cb> Terminal<'alloc, 'cb> {
     /// This also updates the terminal's pixel dimensions (used for image
     /// protocols and size reports), disables synchronized output mode (allowed
     /// by the spec so that resize results are shown immediately), and sends an
-    /// in-band size report if mode 2inner48 is enabled.
+    /// in-band size report if mode 2048 is enabled.
     pub fn resize(
         &mut self,
         cols: u16,
@@ -226,15 +226,16 @@ impl<'alloc: 'cb, 'cb> Terminal<'alloc, 'cb> {
     /// or history coordinates) to a grid reference for that location. Use
     /// [`GridRef::cell`] and [`GridRef::row`] to extract the cell and row.
     ///
-    /// Lookups using the active and viewport tags are fast. The Screen and
-    /// history tags may require traversing the full scrollback page list to
-    /// resolve the y coordinate, so they can be expensive for large scrollback
-    /// buffers.
+    /// Lookups in the active region and viewport are fast. Lookups in the
+    /// screen and history may require traversing the full scrollback page
+    /// list to resolve the y coordinate, so they can be expensive for large
+    /// scrollback buffers.
     ///
     /// This function isn't meant to be used as the core of render loop. It
     /// isn't built to sustain the framerates needed for rendering large
-    /// screens. Use the render state API for that. This API is instead meant
-    /// for less strictly performance-sensitive use cases.
+    /// screens. Use the [render state API](crate::render::RenderState) for
+    /// that. This API is instead meant for less strictly performance-sensitive
+    /// use cases.
     pub fn grid_ref(&self, point: Point) -> Result<GridRef<'_>> {
         let mut grid_ref = ffi::sized!(ffi::GhosttyGridRef);
         let result = unsafe {
@@ -381,11 +382,16 @@ impl Drop for Terminal<'_, '_> {
     }
 }
 
+/// A point in the terminal grid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Point {
+    /// Active area where the cursor can move.
     Active(PointCoordinate),
+    /// Visible viewport (changes when scrolled).
     Viewport(PointCoordinate),
+    /// Full screen including scrollback.
     Screen(PointCoordinate),
+    /// Scrollback history only (before active area).
     History(PointCoordinate),
 }
 
@@ -420,9 +426,12 @@ impl From<Point> for ffi::GhosttyPoint {
     }
 }
 
+/// A coordinate in the terminal grid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PointCoordinate {
+    /// Column (0-indexed).
     x: u16,
+    /// Row (0-indexed). May exceed page size for screen/history tags.
     y: u32,
 }
 impl From<PointCoordinate> for ffi::GhosttyPointCoordinate {
@@ -438,10 +447,14 @@ impl From<ffi::GhosttyPointCoordinate> for PointCoordinate {
     }
 }
 
+/// Scroll viewport behavior.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScrollViewport {
+    /// Scroll to the top of the scrollback.
     Top,
+    /// Scroll to the bottom (active area).
     Bottom,
+    /// Scroll by a delta amount (up is negative).
     Delta(isize),
 }
 impl From<ScrollViewport> for ffi::GhosttyTerminalScrollViewport {
@@ -468,51 +481,73 @@ impl From<ScrollViewport> for ffi::GhosttyTerminalScrollViewport {
 }
 
 /// A terminal mode consisting of its value and its kind (DEC/ANSI).
-#[non_exhaustive]
-#[repr(u16)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Mode {
-    Kam = 2 | Self::ANSI_BIT,
-    Insert = 4 | Self::ANSI_BIT,
-    Srm = 12 | Self::ANSI_BIT,
-    Linefeed = 20 | Self::ANSI_BIT,
+pub struct Mode(pub ffi::GhosttyMode);
 
-    Decckm = 1,
-    _132Column = 3,
-    SlowScroll = 4,
-    ReverseColors = 5,
-    Origin = 6,
-    Wraparound = 7,
-    Autorepeat = 8,
-    X10Mouse = 9,
-    CursorBlinking = 12,
-    CursorVisible = 25,
-    EnableMode3 = 40,
-    ReverseWrap = 45,
-    AltScreenLegacy = 47,
-    KeypadKeys = 66,
-    LeftRightMargin = 69,
-    NormalMouse = 1000,
-    ButtonMouse = 1002,
-    AnyMouse = 1003,
-    FocusEvent = 1004,
-    Utf8Mouse = 1005,
-    SgrMouse = 1006,
-    AltScroll = 1007,
-    UrxvtMouse = 1015,
-    SgrPixelsMouse = 1016,
-    NumlockKeypad = 1035,
-    AltEscPrefix = 1036,
-    AltSendsEsc = 1039,
-    ReverseWrapExt = 1045,
-    AltScreen = 1047,
-    SaveCursor = 1048,
-    AltScreenSave = 1049,
-    BracketedPaste = 2004,
-    SyncOutput = 2026,
-    GraphemeCluster = 2027,
-    ColorSchemeReport = 2031,
-    InBandResize = 2048,
+impl Mode {
+    const ANSI_BIT: u16 = 1 << 15;
+
+    pub const fn new(v: u16, ansi: bool) -> Self {
+        if ansi {
+            Self(v | Self::ANSI_BIT)
+        } else {
+            Self(v)
+        }
+    }
+
+    pub fn value(self) -> u16 {
+        (self.0) & 0x7fff
+    }
+
+    pub fn kind(self) -> ModeKind {
+        if (self.0) & Self::ANSI_BIT > 0 {
+            ModeKind::Ansi
+        } else {
+            ModeKind::Dec
+        }
+    }
+
+    pub const KAM: Self = Self::new(2, true);
+    pub const INSERT: Self = Self::new(4, true);
+    pub const SRM: Self = Self::new(12, true);
+    pub const LINEFEED: Self = Self::new(20, true);
+
+    pub const DECCKM: Self = Self::new(1, false);
+    pub const _132_COLUMN: Self = Self::new(3, false);
+    pub const SLOW_SCROLL: Self = Self::new(4, false);
+    pub const REVERSE_COLORS: Self = Self::new(5, false);
+    pub const ORIGIN: Self = Self::new(6, false);
+    pub const WRAPAROUND: Self = Self::new(7, false);
+    pub const AUTOREPEAT: Self = Self::new(8, false);
+    pub const X10_MOUSE: Self = Self::new(9, false);
+    pub const CURSOR_BLINKING: Self = Self::new(12, false);
+    pub const CURSOR_VISIBLE: Self = Self::new(25, false);
+    pub const ENABLE_MODE3: Self = Self::new(40, false);
+    pub const REVERSE_WRAP: Self = Self::new(45, false);
+    pub const ALT_SCREEN_LEGACY: Self = Self::new(47, false);
+    pub const KEYPAD_KEYS: Self = Self::new(66, false);
+    pub const LEFT_RIGHT_MARGIN: Self = Self::new(69, false);
+    pub const NORMAL_MOUSE: Self = Self::new(1000, false);
+    pub const BUTTON_MOUSE: Self = Self::new(1002, false);
+    pub const ANY_MOUSE: Self = Self::new(1003, false);
+    pub const FOCUS_EVENT: Self = Self::new(1004, false);
+    pub const UTF8_MOUSE: Self = Self::new(1005, false);
+    pub const SGR_MOUSE: Self = Self::new(1006, false);
+    pub const ALT_SCROLL: Self = Self::new(1007, false);
+    pub const URXVT_MOUSE: Self = Self::new(1015, false);
+    pub const SGR_PIXELS_MOUSE: Self = Self::new(1016, false);
+    pub const NUMLOCK_KEYPAD: Self = Self::new(1035, false);
+    pub const ALT_ESC_PREFIX: Self = Self::new(1036, false);
+    pub const ALT_SENDS_ESC: Self = Self::new(1039, false);
+    pub const REVERSE_WRAP_EXT: Self = Self::new(1045, false);
+    pub const ALT_SCREEN: Self = Self::new(1047, false);
+    pub const SAVE_CURSOR: Self = Self::new(1048, false);
+    pub const ALT_SCREEN_SAVE: Self = Self::new(1049, false);
+    pub const BRACKETED_PASTE: Self = Self::new(2004, false);
+    pub const SYNC_OUTPUT: Self = Self::new(2026, false);
+    pub const GRAPHEME_CLUSTER: Self = Self::new(2027, false);
+    pub const COLOR_SCHEME_REPORT: Self = Self::new(2031, false);
+    pub const IN_BAND_RESIZE: Self = Self::new(2048, false);
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -521,24 +556,9 @@ pub enum ModeKind {
     Ansi,
 }
 
-impl Mode {
-    const ANSI_BIT: u16 = 1 << 15;
-
-    pub fn value(self) -> u16 {
-        (self as u16) & 0x7fff
-    }
-
-    pub fn kind(self) -> ModeKind {
-        if (self as u16) & Self::ANSI_BIT > 0 {
-            ModeKind::Ansi
-        } else {
-            ModeKind::Dec
-        }
-    }
-}
 impl From<Mode> for ffi::GhosttyMode {
     fn from(value: Mode) -> Self {
-        value as Self
+        value.0
     }
 }
 

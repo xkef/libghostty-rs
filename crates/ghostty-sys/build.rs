@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Pinned ghostty commit. Update this to pull a newer version.
@@ -78,7 +78,7 @@ fn main() {
 
 /// Clone ghostty at the pinned commit into OUT_DIR/ghostty-src.
 /// Reuses an existing clone if the commit matches.
-fn fetch_ghostty(out_dir: &PathBuf) -> PathBuf {
+fn fetch_ghostty(out_dir: &Path) -> PathBuf {
     let src_dir = out_dir.join("ghostty-src");
     let stamp = src_dir.join(".ghostty-commit");
 

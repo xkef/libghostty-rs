@@ -10,7 +10,8 @@
 //!  3. For each key event:
 //!     *  Create a key event with [`Event::new`] (or reuse an existing one)
 //!     *  Set event properties (action, key, modifiers, etc.)
-//!     *  Encode with [`Encoder::encode`]
+//!     *  Encode with [`Encoder::encode_to_vec`] (with a growable `Vec` buffer)
+//!        or [`Encoder::encode`] (with a fixed byte buffer).
 use std::mem::MaybeUninit;
 
 use crate::{
@@ -148,7 +149,7 @@ impl<'alloc> Encoder<'alloc> {
     ///
     /// Note that the macos_option_as_alt option cannot be determined from
     /// terminal state and is reset to [`OptionAsAlt::False`] by this call.
-    /// Use [`Encoder::with_macos_option_as_alt`] to set it afterward if needed.
+    /// Use [`Encoder::set_macos_option_as_alt`] to set it afterward if needed.
     pub fn set_options_from_terminal(&mut self, terminal: &Terminal<'_, '_>) -> &mut Self {
         unsafe {
             ffi::ghostty_key_encoder_setopt_from_terminal(self.0.as_raw(), terminal.inner.as_raw())
