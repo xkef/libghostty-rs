@@ -1044,7 +1044,7 @@ handlers! {
         &mut self,
         tag = TITLE_CHANGED,
         from = GhosttyTerminalTitleChangedFn(),
-        to = TitleChanged(),
+        to = TitleChangedFn(),
     ) |term, func| {
         func(&term);
     }
