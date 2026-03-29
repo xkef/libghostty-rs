@@ -508,9 +508,9 @@ impl From<Point> for ffi::Point {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PointCoordinate {
     /// Column (0-indexed).
-    x: u16,
+    pub x: u16,
     /// Row (0-indexed). May exceed page size for screen/history tags.
-    y: u32,
+    pub y: u32,
 }
 impl From<PointCoordinate> for ffi::PointCoordinate {
     fn from(value: PointCoordinate) -> Self {
