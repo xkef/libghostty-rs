@@ -20,7 +20,7 @@ macro_rules! sized {
     }};
 }
 
-impl<S> From<S> for GhosttyString
+impl<S> From<S> for bindings::String
 where
     S: Deref<Target = str>,
 {
@@ -32,7 +32,7 @@ where
     }
 }
 
-impl GhosttyString {
+impl bindings::String {
     /// # Safety
     ///
     /// The caller must uphold that the associated lifetime is valid

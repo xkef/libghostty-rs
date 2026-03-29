@@ -12,20 +12,19 @@
 //!     *  Set event properties (action, key, modifiers, etc.)
 //!     *  Encode with [`Encoder::encode_to_vec`] (with a growable `Vec` buffer)
 //!        or [`Encoder::encode`] (with a fixed byte buffer).
-#![allow(clippy::cast_possible_truncation, reason = "bindgen ain't perfect")]
 use std::mem::MaybeUninit;
 
 use crate::{
     Error,
     alloc::{Allocator, Object},
     error::{Result, from_result, from_result_with_len},
-    ffi,
+    ffi::{self, KeyEncoderOption::*},
     terminal::Terminal,
 };
 
 /// Key encoder that converts key events into terminal escape sequences.
 #[derive(Debug)]
-pub struct Encoder<'alloc>(Object<'alloc, ffi::GhosttyKeyEncoderImpl>);
+pub struct Encoder<'alloc>(Object<'alloc, ffi::KeyEncoderImpl>);
 
 impl<'alloc> Encoder<'alloc> {
     /// Create a new key encoder instance.
@@ -43,8 +42,8 @@ impl<'alloc> Encoder<'alloc> {
         unsafe { Self::new_inner(alloc.to_raw()) }
     }
 
-    unsafe fn new_inner(alloc: *const ffi::GhosttyAllocator) -> Result<Self> {
-        let mut raw: ffi::GhosttyKeyEncoder = std::ptr::null_mut();
+    unsafe fn new_inner(alloc: *const ffi::Allocator) -> Result<Self> {
+        let mut raw: ffi::KeyEncoder = std::ptr::null_mut();
         let result = unsafe { ffi::ghostty_key_encoder_new(alloc, &raw mut raw) };
         from_result(result)?;
         Ok(Self(Object::new(raw)?))
@@ -52,7 +51,7 @@ impl<'alloc> Encoder<'alloc> {
 
     unsafe fn setopt(
         &mut self,
-        option: ffi::GhosttyKeyEncoderOption,
+        option: ffi::KeyEncoderOption::Type,
         value: *const std::ffi::c_void,
     ) {
         unsafe { ffi::ghostty_key_encoder_setopt(self.0.as_raw(), option, value) }
@@ -144,20 +143,14 @@ impl<'alloc> Encoder<'alloc> {
     /// Set terminal DEC mode 1: cursor key application mode.
     pub fn set_cursor_key_application(&mut self, value: bool) -> &mut Self {
         unsafe {
-            self.setopt(
-                ffi::GhosttyKeyEncoderOption_GHOSTTY_KEY_ENCODER_OPT_CURSOR_KEY_APPLICATION,
-                std::ptr::from_ref(&value).cast(),
-            );
+            self.setopt(CURSOR_KEY_APPLICATION, std::ptr::from_ref(&value).cast());
         }
         self
     }
     /// Set terminal DEC mode 66: keypad key application mode.
     pub fn set_keypad_key_application(&mut self, value: bool) -> &mut Self {
         unsafe {
-            self.setopt(
-                ffi::GhosttyKeyEncoderOption_GHOSTTY_KEY_ENCODER_OPT_KEYPAD_KEY_APPLICATION,
-                std::ptr::from_ref(&value).cast(),
-            );
+            self.setopt(KEYPAD_KEY_APPLICATION, std::ptr::from_ref(&value).cast());
         }
         self
     }
@@ -165,7 +158,7 @@ impl<'alloc> Encoder<'alloc> {
     pub fn set_ignore_keypad_with_numlock(&mut self, value: bool) -> &mut Self {
         unsafe {
             self.setopt(
-                ffi::GhosttyKeyEncoderOption_GHOSTTY_KEY_ENCODER_OPT_IGNORE_KEYPAD_WITH_NUMLOCK,
+                IGNORE_KEYPAD_WITH_NUMLOCK,
                 std::ptr::from_ref(&value).cast(),
             );
         }
@@ -174,20 +167,14 @@ impl<'alloc> Encoder<'alloc> {
     /// Set terminal DEC mode 1036: alt sends escape prefix.
     pub fn set_alt_esc_prefix(&mut self, value: bool) -> &mut Self {
         unsafe {
-            self.setopt(
-                ffi::GhosttyKeyEncoderOption_GHOSTTY_KEY_ENCODER_OPT_ALT_ESC_PREFIX,
-                std::ptr::from_ref(&value).cast(),
-            );
+            self.setopt(ALT_ESC_PREFIX, std::ptr::from_ref(&value).cast());
         }
         self
     }
     /// Set xterm modifyOtherKeys mode 2.
     pub fn set_modify_other_keys_state_2(&mut self, value: bool) -> &mut Self {
         unsafe {
-            self.setopt(
-                ffi::GhosttyKeyEncoderOption_GHOSTTY_KEY_ENCODER_OPT_MODIFY_OTHER_KEYS_STATE_2,
-                std::ptr::from_ref(&value).cast(),
-            );
+            self.setopt(MODIFY_OTHER_KEYS_STATE_2, std::ptr::from_ref(&value).cast());
         }
         self
     }
@@ -195,20 +182,14 @@ impl<'alloc> Encoder<'alloc> {
     pub fn set_kitty_flags(&mut self, value: KittyKeyFlags) -> &mut Self {
         let value = value.bits();
         unsafe {
-            self.setopt(
-                ffi::GhosttyKeyEncoderOption_GHOSTTY_KEY_ENCODER_OPT_KITTY_FLAGS,
-                std::ptr::from_ref(&value).cast(),
-            );
+            self.setopt(KITTY_FLAGS, std::ptr::from_ref(&value).cast());
         }
         self
     }
     /// Set macOS option-as-alt setting.
     pub fn set_macos_option_as_alt(&mut self, value: OptionAsAlt) -> &mut Self {
         unsafe {
-            self.setopt(
-                ffi::GhosttyKeyEncoderOption_GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT,
-                std::ptr::from_ref(&value).cast(),
-            );
+            self.setopt(MACOS_OPTION_AS_ALT, std::ptr::from_ref(&value).cast());
         }
         self
     }
@@ -224,7 +205,7 @@ impl Drop for Encoder<'_> {
 /// modifiers, and generated text.
 #[derive(Debug)]
 pub struct Event<'alloc> {
-    inner: Object<'alloc, ffi::GhosttyKeyEventImpl>,
+    inner: Object<'alloc, ffi::KeyEventImpl>,
     text: Option<String>,
 }
 
@@ -244,8 +225,8 @@ impl<'alloc> Event<'alloc> {
         unsafe { Self::new_inner(alloc.to_raw()) }
     }
 
-    unsafe fn new_inner(alloc: *const ffi::GhosttyAllocator) -> Result<Self> {
-        let mut raw: ffi::GhosttyKeyEvent = std::ptr::null_mut();
+    unsafe fn new_inner(alloc: *const ffi::Allocator) -> Result<Self> {
+        let mut raw: ffi::KeyEvent = std::ptr::null_mut();
         let result = unsafe { ffi::ghostty_key_event_new(alloc, &raw mut raw) };
         from_result(result)?;
         Ok(Self {
@@ -561,11 +542,11 @@ pub enum Key {
 #[non_exhaustive]
 pub enum Action {
     /// Key was pressed.
-    Press = ffi::GhosttyKeyAction_GHOSTTY_KEY_ACTION_PRESS,
+    Press = ffi::KeyAction::PRESS,
     /// Key was released.
-    Release = ffi::GhosttyKeyAction_GHOSTTY_KEY_ACTION_RELEASE,
+    Release = ffi::KeyAction::RELEASE,
     /// Key is being repeated (held down).
-    Repeat = ffi::GhosttyKeyAction_GHOSTTY_KEY_ACTION_REPEAT,
+    Repeat = ffi::KeyAction::REPEAT,
 }
 
 /// macOS option key behavior.
@@ -576,13 +557,13 @@ pub enum Action {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, int_enum::IntEnum)]
 pub enum OptionAsAlt {
     /// Option key is not treated as alt.
-    False = ffi::GhosttyOptionAsAlt_GHOSTTY_OPTION_AS_ALT_FALSE,
+    False = ffi::OptionAsAlt::FALSE,
     /// Option key is treated as alt.
-    True = ffi::GhosttyOptionAsAlt_GHOSTTY_OPTION_AS_ALT_TRUE,
+    True = ffi::OptionAsAlt::TRUE,
     /// Only left option key is treated as alt.
-    Left = ffi::GhosttyOptionAsAlt_GHOSTTY_OPTION_AS_ALT_LEFT,
+    Left = ffi::OptionAsAlt::LEFT,
     /// Only right option key is treated as alt.
-    Right = ffi::GhosttyOptionAsAlt_GHOSTTY_OPTION_AS_ALT_RIGHT,
+    Right = ffi::OptionAsAlt::RIGHT,
 }
 
 bitflags::bitflags! {
@@ -599,33 +580,33 @@ bitflags::bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Mods: u16 {
         /// Shift key is pressed.
-        const SHIFT = ffi::GHOSTTY_MODS_SHIFT as u16;
+        const SHIFT = ffi::MODS_SHIFT as u16;
         /// Alt key is pressed.
-        const ALT = ffi::GHOSTTY_MODS_ALT as u16;
+        const ALT = ffi::MODS_ALT as u16;
         /// Control key is pressed.
-        const CTRL = ffi::GHOSTTY_MODS_CTRL as u16;
+        const CTRL = ffi::MODS_CTRL as u16;
         /// Super/Command/Windows key is pressed.
-        const SUPER = ffi::GHOSTTY_MODS_SUPER as u16;
+        const SUPER = ffi::MODS_SUPER as u16;
         /// Caps Lock is active.
-        const CAPS_LOCK = ffi::GHOSTTY_MODS_CAPS_LOCK as u16;
+        const CAPS_LOCK = ffi::MODS_CAPS_LOCK as u16;
         /// Num Lock is active.
-        const NUM_LOCK = ffi::GHOSTTY_MODS_NUM_LOCK as u16;
+        const NUM_LOCK = ffi::MODS_NUM_LOCK as u16;
         /// Right Shift is pressed (unset = left, set = right).
         ///
         /// Only valid when [`Mods::SHIFT`] is set.
-        const SHIFT_SIDE = ffi::GHOSTTY_MODS_SHIFT_SIDE as u16;
+        const SHIFT_SIDE = ffi::MODS_SHIFT_SIDE as u16;
         /// Right Alt is pressed (unset = left, set = right).
         ///
         /// Only valid when [`Mods::ALT`] is set.
-        const ALT_SIDE = ffi::GHOSTTY_MODS_ALT_SIDE as u16;
+        const ALT_SIDE = ffi::MODS_ALT_SIDE as u16;
         /// Right Control is pressed (unset = left, set = right).
         ///
         /// Only valid when [`Mods::CTRL`] is set.
-        const CTRL_SIDE = ffi::GHOSTTY_MODS_CTRL_SIDE as u16;
+        const CTRL_SIDE = ffi::MODS_CTRL_SIDE as u16;
         /// Right Super is pressed (unset = left, set = right).
         ///
         /// Only valid when [`Mods::SUPER`] is set.
-        const SUPER_SIDE = ffi::GHOSTTY_MODS_SUPER_SIDE as u16;
+        const SUPER_SIDE = ffi::MODS_SUPER_SIDE as u16;
     }
 
     /// Kitty keyboard protocol flags.
@@ -634,18 +615,18 @@ bitflags::bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct KittyKeyFlags: u8 {
         /// Kitty keyboard protocol disabled (all flags off).
-        const DISABLED = ffi::GHOSTTY_KITTY_KEY_DISABLED as u8;
+        const DISABLED = ffi::KITTY_KEY_DISABLED as u8;
         /// Disambiguate escape codes.
-        const DISAMBIGUATE = ffi::GHOSTTY_KITTY_KEY_DISAMBIGUATE as u8;
+        const DISAMBIGUATE = ffi::KITTY_KEY_DISAMBIGUATE as u8;
         /// Report key press and release events.
-        const REPORT_EVENTS = ffi::GHOSTTY_KITTY_KEY_REPORT_EVENTS as u8;
+        const REPORT_EVENTS = ffi::KITTY_KEY_REPORT_EVENTS as u8;
         /// Report alternate key codes.
-        const REPORT_ALTERNATES = ffi::GHOSTTY_KITTY_KEY_REPORT_ALTERNATES as u8;
+        const REPORT_ALTERNATES = ffi::KITTY_KEY_REPORT_ALTERNATES as u8;
         /// Report all key events including those normally handled by the terminal.
-        const REPORT_ALL = ffi::GHOSTTY_KITTY_KEY_REPORT_ALL as u8;
+        const REPORT_ALL = ffi::KITTY_KEY_REPORT_ALL as u8;
         /// Report associated text with key events
-        const REPORT_ASSOCIATED = ffi::GHOSTTY_KITTY_KEY_REPORT_ASSOCIATED as u8;
+        const REPORT_ASSOCIATED = ffi::KITTY_KEY_REPORT_ASSOCIATED as u8;
         /// All Kitty keyboard protocol flags enabled
-        const ALL = ffi::GHOSTTY_KITTY_KEY_ALL as u8;
+        const ALL = ffi::KITTY_KEY_ALL as u8;
     }
 }

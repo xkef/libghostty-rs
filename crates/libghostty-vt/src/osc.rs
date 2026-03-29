@@ -15,7 +15,7 @@ use crate::{
 /// This interface makes it easy to integrate into most environments and avoids
 /// over-allocating buffers.
 #[derive(Debug)]
-pub struct Parser<'alloc>(Object<'alloc, ffi::GhosttyOscParserImpl>);
+pub struct Parser<'alloc>(Object<'alloc, ffi::OscParserImpl>);
 
 impl<'alloc> Parser<'alloc> {
     /// Create a new OSC parser.
@@ -33,8 +33,8 @@ impl<'alloc> Parser<'alloc> {
         unsafe { Self::new_inner(alloc.to_raw()) }
     }
 
-    unsafe fn new_inner(alloc: *const ffi::GhosttyAllocator) -> Result<Self> {
-        let mut raw: ffi::GhosttyOscParser = std::ptr::null_mut();
+    unsafe fn new_inner(alloc: *const ffi::Allocator) -> Result<Self> {
+        let mut raw: ffi::OscParser = std::ptr::null_mut();
         let result = unsafe { ffi::ghostty_osc_new(alloc, &raw mut raw) };
         from_result(result)?;
         Ok(Self(Object::new(raw)?))
@@ -97,7 +97,7 @@ impl Drop for Parser<'_> {
 /// The command can be queried for its type and associated data.
 #[derive(Debug)]
 pub struct Command<'p, 'alloc> {
-    inner: Object<'alloc, ffi::GhosttyOscCommandImpl>,
+    inner: Object<'alloc, ffi::OscCommandImpl>,
     _parser: PhantomData<&'p Parser<'alloc>>,
 }
 
@@ -119,5 +119,5 @@ impl Command<'_, '_> {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, int_enum::IntEnum)]
 pub enum CommandType {
     #[default]
-    Invalid = ffi::GhosttyOscCommandType_GHOSTTY_OSC_COMMAND_INVALID,
+    Invalid = ffi::OscCommandType::INVALID,
 }

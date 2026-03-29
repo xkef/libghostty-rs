@@ -36,7 +36,7 @@ use crate::{
 /// }
 /// ```
 #[derive(Debug)]
-pub struct Parser<'alloc>(Object<'alloc, ffi::GhosttySgrParserImpl>);
+pub struct Parser<'alloc>(Object<'alloc, ffi::SgrParserImpl>);
 
 impl<'alloc> Parser<'alloc> {
     /// Create a new SGR parser.
@@ -54,8 +54,8 @@ impl<'alloc> Parser<'alloc> {
         unsafe { Self::new_inner(alloc.to_raw()) }
     }
 
-    unsafe fn new_inner(alloc: *const ffi::GhosttyAllocator) -> Result<Self> {
-        let mut raw: ffi::GhosttySgrParser = std::ptr::null_mut();
+    unsafe fn new_inner(alloc: *const ffi::Allocator) -> Result<Self> {
+        let mut raw: ffi::SgrParser = std::ptr::null_mut();
         let result = unsafe { ffi::ghostty_sgr_new(alloc, &raw mut raw) };
         from_result(result)?;
         Ok(Self(Object::new(raw)?))
@@ -109,7 +109,7 @@ impl<'alloc> Parser<'alloc> {
         reason = "lending `next` cannot implement trait"
     )]
     pub fn next(&mut self) -> Result<Option<Attribute<'_>>> {
-        let mut raw_attr = ffi::GhosttySgrAttribute::default();
+        let mut raw_attr = ffi::SgrAttribute::default();
         let has_next = unsafe { ffi::ghostty_sgr_next(self.0.as_raw(), &raw mut raw_attr) };
         if has_next {
             // This shouldn't really *ever* fail, so the fact it failed
@@ -176,7 +176,7 @@ pub enum Attribute<'p> {
 
 impl Attribute<'_> {
     /// This should never return None, but just to be safe.
-    fn from_raw(value: ffi::GhosttySgrAttribute) -> Result<Self> {
+    fn from_raw(value: ffi::SgrAttribute) -> Result<Self> {
         Ok(match value.tag {
             0 => Self::Unset,
             1 => Self::Unknown(unsafe { value.value.unknown }.into()),
@@ -226,8 +226,8 @@ pub struct Unknown<'p> {
     pub partial: &'p [u16],
 }
 
-impl From<ffi::GhosttySgrUnknown> for Unknown<'_> {
-    fn from(value: ffi::GhosttySgrUnknown) -> Self {
+impl From<ffi::SgrUnknown> for Unknown<'_> {
+    fn from(value: ffi::SgrUnknown) -> Self {
         // SAFETY: We trust libghostty to give us two valid slices
         // of u16s that last at least as long as the current iteration,
         // which is guaranteed by Rust's mutation XOR sharability property

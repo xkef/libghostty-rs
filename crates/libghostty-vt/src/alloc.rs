@@ -12,7 +12,7 @@ use allocator_api2::alloc;
 
 use crate::{
     error::{Error, Result},
-    ffi::{self, GhosttyAllocator, GhosttyAllocatorVtable},
+    ffi,
 };
 
 /// A custom allocator that libghostty uses for its memory allocations.
@@ -26,12 +26,12 @@ use crate::{
 /// within libghostty as [`Allocator::GLOBAL`].
 #[derive(Debug)]
 pub struct Allocator<'ctx, Ctx: 'ctx = ()> {
-    pub(crate) inner: GhosttyAllocator,
+    pub(crate) inner: ffi::Allocator,
     _phan: PhantomData<&'ctx Ctx>,
 }
 
 impl<Ctx> Allocator<'_, Ctx> {
-    pub(crate) fn to_raw(&self) -> *const GhosttyAllocator {
+    pub(crate) fn to_raw(&self) -> *const ffi::Allocator {
         std::ptr::from_ref(&self.inner)
     }
 }
@@ -41,7 +41,7 @@ impl<Ctx> Allocator<'_, Ctx> {
 #[derive(Debug)]
 pub(crate) struct Object<'alloc, T> {
     pub(crate) ptr: NonNull<T>,
-    _phan: PhantomData<&'alloc GhosttyAllocator>,
+    _phan: PhantomData<&'alloc ffi::Allocator>,
 }
 
 impl<T> Object<'_, T> {
@@ -62,8 +62,8 @@ impl<T> Object<'_, T> {
 pub struct Bytes<'alloc> {
     ptr: NonNull<u8>,
     len: usize,
-    alloc: *const GhosttyAllocator,
-    _phan: PhantomData<&'alloc GhosttyAllocator>,
+    alloc: *const ffi::Allocator,
+    _phan: PhantomData<&'alloc ffi::Allocator>,
 }
 impl<'alloc> Bytes<'alloc> {
     /// Allocate `len` bytes with libghostty's default allocator.
@@ -85,7 +85,7 @@ impl<'alloc> Bytes<'alloc> {
         unsafe { Self::new_inner(alloc.to_raw(), len) }
     }
 
-    unsafe fn new_inner(alloc: *const ffi::GhosttyAllocator, len: usize) -> Result<Self> {
+    unsafe fn new_inner(alloc: *const ffi::Allocator, len: usize) -> Result<Self> {
         let raw = unsafe { ffi::ghostty_alloc(alloc, len) };
         let ptr = NonNull::new(raw).ok_or(Error::OutOfMemory)?;
         Ok(unsafe { Self::from_raw_parts(ptr, len, alloc) })
@@ -94,7 +94,7 @@ impl<'alloc> Bytes<'alloc> {
     pub(crate) unsafe fn from_raw_parts(
         ptr: NonNull<u8>,
         len: usize,
-        alloc: *const GhosttyAllocator,
+        alloc: *const ffi::Allocator,
     ) -> Self {
         Self {
             ptr,
@@ -160,9 +160,9 @@ impl Allocator<'static> {
     /// A custom allocator based on Rust's built-in
     /// [global allocator](std::alloc::GlobalAlloc).
     pub const GLOBAL: Self = Self {
-        inner: GhosttyAllocator {
+        inner: ffi::Allocator {
             ctx: std::ptr::null_mut(),
-            vtable: &GhosttyAllocatorVtable {
+            vtable: &ffi::AllocatorVtable {
                 alloc: Some(_global_alloc),
                 free: Some(_global_free),
                 resize: Some(_global_resize),
@@ -230,9 +230,9 @@ unsafe extern "C" fn _global_remap(
 impl<'ctx, A: alloc::Allocator + 'ctx> From<A> for Allocator<'ctx, A> {
     fn from(value: A) -> Self {
         Self {
-            inner: GhosttyAllocator {
+            inner: ffi::Allocator {
                 ctx: std::ptr::from_ref(value.by_ref()) as *mut std::ffi::c_void,
-                vtable: &GhosttyAllocatorVtable {
+                vtable: &ffi::AllocatorVtable {
                     alloc: Some(_alloc::<A>),
                     free: Some(_free::<A>),
                     resize: Some(_resize),
