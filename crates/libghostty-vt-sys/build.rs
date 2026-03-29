@@ -4,7 +4,7 @@ use std::process::Command;
 
 /// Pinned ghostty commit. Update this to pull a newer version.
 const GHOSTTY_REPO: &str = "https://github.com/ghostty-org/ghostty.git";
-const GHOSTTY_COMMIT: &str = "bebca84668947bfc92b9a30ed58712e1c34eee1d";
+const GHOSTTY_COMMIT: &str = "debcffbadb75221a030319c075fae12cfe114176";
 
 fn main() {
     // docs.rs has no Zig toolchain. The checked-in bindings in src/bindings.rs
@@ -92,9 +92,10 @@ fn fetch_ghostty(out_dir: &Path) -> PathBuf {
     // Skip fetch if we already have the right commit.
     if stamp.exists()
         && let Ok(existing) = std::fs::read_to_string(&stamp)
-            && existing.trim() == GHOSTTY_COMMIT {
-                return src_dir;
-            }
+        && existing.trim() == GHOSTTY_COMMIT
+    {
+        return src_dir;
+    }
 
     // Clean and clone fresh.
     if src_dir.exists() {
