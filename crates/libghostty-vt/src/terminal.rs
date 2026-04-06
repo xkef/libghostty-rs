@@ -283,7 +283,7 @@ impl<'alloc: 'cb, 'cb> Terminal<'alloc, 'cb> {
         };
         from_optional_result(result, value)
     }
-    fn set<T>(&mut self, tag: ffi::TerminalOption::Type, v: &T) -> Result<()> {
+    fn set<T>(&self, tag: ffi::TerminalOption::Type, v: &T) -> Result<()> {
         let result = unsafe {
             ffi::ghostty_terminal_set(self.inner.as_raw(), tag, std::ptr::from_ref(v).cast())
         };
