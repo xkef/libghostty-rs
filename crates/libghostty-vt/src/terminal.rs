@@ -109,7 +109,7 @@ pub use ffi::{SizeReportSize, TerminalScrollbar as Scrollbar};
 #[derive(Debug)]
 pub struct Terminal<'alloc: 'cb, 'cb> {
     pub(crate) inner: Object<'alloc, ffi::TerminalImpl>,
-    vtable: VTable<'alloc, 'cb>,
+    vtable: Box<VTable<'alloc, 'cb>>,
 }
 
 /// Terminal initialization options.
@@ -158,7 +158,7 @@ impl<'alloc: 'cb, 'cb> Terminal<'alloc, 'cb> {
         from_result(result)?;
         Ok(Self {
             inner: Object::new(raw)?,
-            vtable: VTable::default(),
+            vtable: Box::new(VTable::default()),
         })
     }
 
@@ -903,7 +903,7 @@ macro_rules! handlers {
                     $($rfname: $rfty),*
                 ) $(-> $rawrty)? {
                     // SAFETY: We own the vtable, so it should never become invalid.
-                    let vtable = unsafe { &mut *ud.cast::<VTable<'_, '_>>() };
+                    let vtable = unsafe { &mut *ud.cast::<::std::boxed::Box<VTable<'_, '_>>>() };
 
                     let obj = $crate::alloc::Object::new(t).expect("received null terminal ptr in callback - this is a bug!");
                     // IMPORTANT: Do NOT let the destructor run.
