@@ -19,6 +19,7 @@
 //!         "Tmux control mode: {}",
 //!         if supports_tmux_control_mode().unwrap_or(false) { "enabled" } else { "disabled" }
 //!     );
+//!     println!("Link mode: {:?}", link_mode());
 //!     Ok(())
 //! }
 //! ```
@@ -43,6 +44,16 @@ pub fn supports_kitty_graphics() -> Result<bool> {
 /// Whether tmux control mode support is available.
 pub fn supports_tmux_control_mode() -> Result<bool> {
     build_info(Info::TMUX_CONTROL_MODE)
+}
+
+/// How Cargo links libghostty-vt into the Rust crate.
+#[must_use]
+pub fn link_mode() -> LinkMode {
+    if cfg!(feature = "link-static") {
+        LinkMode::Static
+    } else {
+        LinkMode::Dynamic
+    }
 }
 
 /// The optimization mode the library was built with.
@@ -92,6 +103,15 @@ fn build_info<T>(tag: ffi::BuildInfo::Type) -> Result<T> {
     from_result(result)?;
     // SAFETY: Value should be initialized after successful call.
     Ok(unsafe { value.assume_init() })
+}
+
+/// The link mode Cargo used for libghostty-vt.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum LinkMode {
+    /// Link against the shared libghostty-vt library.
+    Dynamic,
+    /// Link against the static libghostty-vt archive.
+    Static,
 }
 
 /// The optimization mode libghostty is compiled with.

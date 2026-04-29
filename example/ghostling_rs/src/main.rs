@@ -176,13 +176,14 @@ async fn main() -> Result<()> {
     let mut input = Input::new()?;
 
     println!(
-        "ghostling-rs | simd: {}, optimize: {:?}",
+        "ghostling-rs | simd: {}, optimize: {:?}, link: {:?}",
         if build_info::supports_simd()? {
             "enabled"
         } else {
             "disabled"
         },
         build_info::optimize_mode()?,
+        build_info::link_mode(),
     );
     println!("Initialized terminal with size {cols}x{rows}");
 

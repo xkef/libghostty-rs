@@ -6,6 +6,56 @@ use std::process::Command;
 const GHOSTTY_REPO: &str = "https://github.com/ghostty-org/ghostty.git";
 const GHOSTTY_COMMIT: &str = "6590196661f769dd8f2b3e85d6c98262c4ec5b3b";
 
+#[derive(Clone, Copy)]
+enum LinkMode {
+    Dynamic,
+    Static,
+}
+
+impl LinkMode {
+    fn current() -> Self {
+        if cfg!(feature = "link-static") {
+            Self::Static
+        } else {
+            Self::Dynamic
+        }
+    }
+
+    fn artifact_kind(self) -> &'static str {
+        match self {
+            Self::Dynamic => "shared library",
+            Self::Static => "static library",
+        }
+    }
+
+    fn matches_library(self, target: &str, file_name: &str) -> bool {
+        match self {
+            Self::Dynamic => {
+                if target.contains("darwin") {
+                    file_name.starts_with("libghostty-vt") && file_name.ends_with(".dylib")
+                } else {
+                    file_name == "libghostty-vt.so" || file_name.starts_with("libghostty-vt.so.")
+                }
+            }
+            Self::Static => {
+                if target.contains("windows") {
+                    file_name == "ghostty-vt-static.lib"
+                } else {
+                    file_name == "libghostty-vt.a"
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "pkg-config")]
+    fn pkg_config_name(self) -> &'static str {
+        match self {
+            Self::Dynamic => "libghostty-vt",
+            Self::Static => "libghostty-vt-static",
+        }
+    }
+}
+
 fn main() {
     // docs.rs has no Zig toolchain. The checked-in bindings in src/bindings.rs
     // are enough for generating documentation, so skip the entire native
@@ -13,6 +63,8 @@ fn main() {
     if env::var("DOCS_RS").is_ok() {
         return;
     }
+
+    let link_mode = LinkMode::current();
 
     println!("cargo:rerun-if-env-changed=GHOSTTY_SOURCE_DIR");
     println!("cargo:rerun-if-env-changed=TARGET");
@@ -23,7 +75,7 @@ fn main() {
     // pkg-config feature is enabled, so local Ghostty checkouts remain easy to
     // test against.
     if env::var_os("GHOSTTY_SOURCE_DIR").is_some() {
-        build_vendored();
+        build_vendored(link_mode);
         return;
     }
 
@@ -31,16 +83,16 @@ fn main() {
     // fetching Ghostty. libghostty is pre-1.0, so this crate intentionally does
     // not promise compatibility with every installed C API revision.
     #[cfg(feature = "pkg-config")]
-    if try_pkg_config() {
+    if try_pkg_config(link_mode) {
         return;
     }
 
-    build_vendored();
+    build_vendored(link_mode);
 }
 
-/// Build libghostty-vt from source via zig. The zig build itself
-/// generates a `libghostty-vt.pc` pkg-config file in `share/pkgconfig/`.
-fn build_vendored() {
+/// Build libghostty-vt from source via zig. The zig build itself generates
+/// shared and static artifacts plus pkg-config files in `share/pkgconfig/`.
+fn build_vendored(link_mode: LinkMode) {
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR must be set"));
     let target = env::var("TARGET").expect("TARGET must be set");
     let host = env::var("HOST").expect("HOST must be set");
@@ -82,7 +134,7 @@ fn build_vendored() {
     let lib_dir = install_prefix.join("lib");
     let include_dir = install_prefix.join("include");
 
-    let has_shared_library = std::fs::read_dir(&lib_dir)
+    let has_requested_library = std::fs::read_dir(&lib_dir)
         .unwrap_or_else(|error| panic!("failed to read {}: {error}", lib_dir.display()))
         .any(|entry| {
             let entry = entry.unwrap_or_else(|error| {
@@ -93,15 +145,12 @@ fn build_vendored() {
                 return false;
             };
 
-            if target.contains("darwin") {
-                file_name.starts_with("libghostty-vt") && file_name.ends_with(".dylib")
-            } else {
-                file_name == "libghostty-vt.so" || file_name.starts_with("libghostty-vt.so.")
-            }
+            link_mode.matches_library(&target, file_name)
         });
     assert!(
-        has_shared_library,
-        "expected libghostty-vt shared library in {}",
+        has_requested_library,
+        "expected libghostty-vt {} in {}",
+        link_mode.artifact_kind(),
         lib_dir.display()
     );
     assert!(
@@ -111,18 +160,69 @@ fn build_vendored() {
     );
 
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
-    println!("cargo:rustc-link-lib=dylib=ghostty-vt");
+    match link_mode {
+        LinkMode::Dynamic => println!("cargo:rustc-link-lib=dylib=ghostty-vt"),
+        LinkMode::Static => {
+            println!("cargo:rustc-link-lib=static=ghostty-vt");
+            // The static archive includes C++ objects from Ghostty's SIMD
+            // dependencies. Upstream's static pkg-config module exposes the
+            // same runtime requirement via `Libs.private: -lc++`.
+            println!("cargo:rustc-link-lib=c++");
+        }
+    }
     emit_include_metadata(&[include_dir]);
 }
 
 #[cfg(feature = "pkg-config")]
-fn try_pkg_config() -> bool {
-    let lib = match pkg_config::Config::new().probe("libghostty-vt") {
+fn try_pkg_config(link_mode: LinkMode) -> bool {
+    let mut config = pkg_config::Config::new();
+    let lib = match link_mode {
+        LinkMode::Dynamic => config.probe(link_mode.pkg_config_name()),
+        LinkMode::Static => config
+            .statik(true)
+            .cargo_metadata(false)
+            .probe(link_mode.pkg_config_name()),
+    };
+    let lib = match lib {
         Ok(lib) => lib,
         Err(_) => return false,
     };
+
+    if let LinkMode::Static = link_mode {
+        emit_static_pkg_config_metadata(&lib);
+    }
     emit_include_metadata(&lib.include_paths);
     true
+}
+
+#[cfg(feature = "pkg-config")]
+fn emit_static_pkg_config_metadata(lib: &pkg_config::Library) {
+    for path in &lib.link_paths {
+        println!("cargo:rustc-link-search=native={}", path.display());
+    }
+    for path in &lib.link_files {
+        if let Some(parent) = path.parent() {
+            println!("cargo:rustc-link-search=native={}", parent.display());
+        }
+    }
+    for path in &lib.framework_paths {
+        println!("cargo:rustc-link-search=framework={}", path.display());
+    }
+    for framework in &lib.frameworks {
+        println!("cargo:rustc-link-lib=framework={framework}");
+    }
+
+    println!("cargo:rustc-link-lib=static=ghostty-vt");
+    for library in &lib.libs {
+        if library != "ghostty-vt" {
+            println!("cargo:rustc-link-lib={library}");
+        }
+    }
+    for args in &lib.ld_args {
+        if !args.is_empty() {
+            println!("cargo:rustc-link-arg=-Wl,{}", args.join(","));
+        }
+    }
 }
 
 fn emit_include_metadata(include_paths: &[PathBuf]) {

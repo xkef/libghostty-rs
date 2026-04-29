@@ -66,6 +66,11 @@ the checked-in bindings are expected to move with the pinned Ghostty source and
 do not guarantee compatibility with arbitrary installed C API revisions. An
 explicit `GHOSTTY_SOURCE_DIR` always wins.
 
+Enable `libghostty-vt/link-static` or `libghostty-vt-sys/link-static` to link
+`libghostty-vt.a` instead of the shared library. This statically links the
+Ghostty VT archive, but the final binary may still depend on platform runtime
+libraries such as libc++.
+
 ```sh
 nix develop
 cargo check
@@ -84,3 +89,6 @@ LD_LIBRARY_PATH=$(dirname $(find target/debug/build/libghostty-vt-sys-*/out -nam
 DYLD_LIBRARY_PATH=$(dirname $(find target/debug/build/libghostty-vt-sys-*/out -name "libghostty-vt*" | head -1)) \
   cargo run -p ghostling_rs
 ```
+
+When `link-static` is enabled, the example does not need `LD_LIBRARY_PATH` or
+`DYLD_LIBRARY_PATH` for `libghostty-vt`.
