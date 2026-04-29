@@ -69,7 +69,7 @@ explicit `GHOSTTY_SOURCE_DIR` always wins.
 Enable `libghostty-vt/link-static` or `libghostty-vt-sys/link-static` to link
 `libghostty-vt.a` instead of the shared library. This statically links the
 Ghostty VT archive, but the final binary may still depend on platform runtime
-libraries such as libc++.
+libraries.
 
 ```sh
 nix develop
