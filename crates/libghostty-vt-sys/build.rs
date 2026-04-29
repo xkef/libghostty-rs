@@ -98,7 +98,7 @@ fn build_vendored(link_mode: LinkMode) {
     let host = env::var("HOST").expect("HOST must be set");
 
     // Locate ghostty source: env override > fetch into OUT_DIR.
-    let ghostty_dir = match env::var("GHOSTTY_SOURCE_DIR") {
+    let (ghostty_dir, can_patch_source) = match env::var("GHOSTTY_SOURCE_DIR") {
         Ok(dir) => {
             let p = PathBuf::from(dir);
             assert!(
@@ -106,10 +106,13 @@ fn build_vendored(link_mode: LinkMode) {
                 "GHOSTTY_SOURCE_DIR does not contain build.zig: {}",
                 p.display()
             );
-            p
+            (p, false)
         }
-        Err(_) => fetch_ghostty(&out_dir),
+        Err(_) => (fetch_ghostty(&out_dir), true),
     };
+    if can_patch_source {
+        disable_lib_vt_xcframework(&ghostty_dir);
+    }
 
     // Build libghostty-vt via zig.
     let install_prefix = out_dir.join("ghostty-install");
@@ -118,6 +121,7 @@ fn build_vendored(link_mode: LinkMode) {
     build
         .arg("build")
         .arg("-Demit-lib-vt")
+        .arg("-Demit-xcframework=false")
         .arg("--prefix")
         .arg(&install_prefix)
         .current_dir(&ghostty_dir);
@@ -133,6 +137,7 @@ fn build_vendored(link_mode: LinkMode) {
 
     let lib_dir = install_prefix.join("lib");
     let include_dir = install_prefix.join("include");
+    warn_unused_xcframework(&lib_dir);
 
     let has_requested_library = std::fs::read_dir(&lib_dir)
         .unwrap_or_else(|error| panic!("failed to read {}: {error}", lib_dir.display()))
@@ -171,6 +176,36 @@ fn build_vendored(link_mode: LinkMode) {
         }
     }
     emit_include_metadata(&[include_dir]);
+}
+
+fn disable_lib_vt_xcframework(ghostty_dir: &Path) {
+    let build_zig = ghostty_dir.join("build.zig");
+    let source = std::fs::read_to_string(&build_zig)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", build_zig.display()));
+    if source.contains("libghostty-rs disables the unused libghostty-vt xcframework") {
+        return;
+    }
+
+    let old = "    // libghostty-vt xcframework (Apple only, universal binary).\n    // Only when building on macOS (not cross-compiling) since\n    // xcodebuild is required.\n    if (builtin.os.tag.isDarwin() and config.target.result.os.tag.isDarwin()) {";
+    let new = "    // libghostty-vt xcframework (Apple only, universal binary).\n    // libghostty-rs disables the unused libghostty-vt xcframework because\n    // Cargo links the installed library artifacts directly.\n    if (false and builtin.os.tag.isDarwin() and config.target.result.os.tag.isDarwin()) {";
+    let patched = source.replace(old, new);
+    assert!(
+        patched != source,
+        "failed to disable libghostty-vt xcframework in {}",
+        build_zig.display()
+    );
+    std::fs::write(&build_zig, patched)
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", build_zig.display()));
+}
+
+fn warn_unused_xcframework(lib_dir: &Path) {
+    let xcframework = lib_dir.join("ghostty-vt.xcframework");
+    if xcframework.exists() {
+        println!(
+            "cargo:warning=unused libghostty-vt XCFramework emitted at {}; Cargo links the dylib or archive directly",
+            xcframework.display()
+        );
+    }
 }
 
 #[cfg(feature = "pkg-config")]
