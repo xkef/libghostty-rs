@@ -67,6 +67,7 @@ fn main() {
     let link_mode = LinkMode::current();
 
     println!("cargo:rerun-if-env-changed=GHOSTTY_SOURCE_DIR");
+    println!("cargo:rerun-if-env-changed=GHOSTTY_ZIG_SYSTEM_DIR");
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=HOST");
     println!("cargo:rerun-if-changed=crates/libghostty-vt-sys/build.rs");
@@ -113,15 +114,41 @@ fn build_vendored(link_mode: LinkMode) {
 
     // Build libghostty-vt via zig.
     let install_prefix = out_dir.join("ghostty-install");
+    let zig_cache_dir = out_dir.join("zig-cache");
+    let zig_global_cache_dir = out_dir.join("zig-global-cache");
 
     let mut build = Command::new("zig");
     build
         .arg("build")
         .arg("-Demit-lib-vt")
         .arg("-Demit-xcframework=false")
+        .arg("-Dapp-runtime=none")
         .arg("--prefix")
         .arg(&install_prefix)
+        .arg("--cache-dir")
+        .arg(&zig_cache_dir)
         .current_dir(&ghostty_dir);
+
+    // Package managers can provide Ghostty's Zig package cache ahead of time
+    // and ask Zig to resolve packages from that immutable store path instead
+    // of fetching during this Cargo build script.
+    if let Ok(dir) = env::var("GHOSTTY_ZIG_SYSTEM_DIR") {
+        assert!(
+            !dir.is_empty(),
+            "GHOSTTY_ZIG_SYSTEM_DIR must not be empty when set"
+        );
+        let zig_system_dir = PathBuf::from(dir);
+        assert!(
+            zig_system_dir.exists(),
+            "GHOSTTY_ZIG_SYSTEM_DIR does not exist: {}",
+            zig_system_dir.display()
+        );
+        build
+            .arg("--system")
+            .arg(&zig_system_dir)
+            .arg("--global-cache-dir")
+            .arg(&zig_global_cache_dir);
+    }
 
     // Only pass -Dtarget when cross-compiling. For native builds, let zig
     // auto-detect the host (matches how ghostty's own CMakeLists.txt works).
