@@ -53,15 +53,17 @@ pub use ffi::{SizeReportSize, TerminalScrollbar as Scrollbar};
 /// due to Rust's much stricter safety guarantees. In turn, we use the
 /// user data internally for callback dispatch purposes.
 ///
-/// You should instead use idiomatic Rust mechanisms like [`Rc`](std::rc::Rc)s
-/// to hold common, mutable state between callbacks (which is perfectly safe,
-/// since everything is run on a single thread within a single `vt_write` call),
-/// or with some other type with interior mutability.
+/// You should instead use idiomatic Rust mechanisms like
+/// [`Arc`](std::sync::Arc) with a lock or atomic value to hold common, mutable
+/// state between callbacks.
 ///
 /// ## Example: Registering effects and processing VT data
 ///
 /// ```rust
-/// use std::{cell::Cell, rc::Rc};
+/// use std::sync::{
+///     Arc,
+///     atomic::{AtomicUsize, Ordering},
+/// };
 /// use libghostty_vt::{Terminal, TerminalOptions};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,7 +74,7 @@ pub use ffi::{SizeReportSize, TerminalScrollbar as Scrollbar};
 /// })?;
 ///
 /// // Set up a simple bell counter
-/// let bell_count = Rc::new(Cell::new(0usize));
+/// let bell_count = Arc::new(AtomicUsize::new(0));
 /// terminal
 ///     .on_pty_write(|_term, data| {
 ///         println!("Replying {} bytes to the PTY", data.len());
@@ -80,8 +82,8 @@ pub use ffi::{SizeReportSize, TerminalScrollbar as Scrollbar};
 ///    .on_bell({
 ///        let bell_count = bell_count.clone();
 ///        move |_term| {
-///            bell_count.update(|v| v + 1);
-///            println!("Bell! (count = {})", bell_count.get())
+///            let count = bell_count.fetch_add(1, Ordering::Relaxed) + 1;
+///            println!("Bell! (count = {count})")
 ///        }
 ///     })?
 ///    .on_title_changed(|term| {
@@ -103,7 +105,7 @@ pub use ffi::{SizeReportSize, TerminalScrollbar as Scrollbar};
 /// // 4. Another bell to show the counter increments
 /// terminal.vt_write(b"\x07");
 ///
-/// assert_eq!(bell_count.get(), 2);
+/// assert_eq!(bell_count.load(Ordering::Relaxed), 2);
 /// # Ok(())}
 /// ```
 #[derive(Debug)]
