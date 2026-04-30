@@ -66,10 +66,13 @@ fn main() {
 
     let link_mode = LinkMode::current();
 
+    println!("cargo:rerun-if-env-changed=LIBGHOSTTY_VT_SYS_OPTIMIZE");
     println!("cargo:rerun-if-env-changed=GHOSTTY_SOURCE_DIR");
     println!("cargo:rerun-if-env-changed=GHOSTTY_ZIG_SYSTEM_DIR");
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=HOST");
+    println!("cargo:rerun-if-env-changed=DEBUG");
+    println!("cargo:rerun-if-env-changed=OPT_LEVEL");
     println!("cargo:rerun-if-changed=crates/libghostty-vt-sys/build.rs");
 
     // An explicit source override should stay authoritative even when the
@@ -117,10 +120,13 @@ fn build_vendored(link_mode: LinkMode) {
     let zig_cache_dir = out_dir.join("zig-cache");
     let zig_global_cache_dir = out_dir.join("zig-global-cache");
 
+    let optimize = zig_optimize_mode();
+
     let mut build = Command::new("zig");
     build
         .arg("build")
         .arg("-Demit-lib-vt")
+        .arg(format!("-Doptimize={optimize}"))
         .arg("-Demit-xcframework=false")
         .arg("-Dapp-runtime=none")
         .arg("--prefix")
@@ -266,6 +272,38 @@ fn emit_include_metadata(include_paths: &[PathBuf]) {
     let joined = env::join_paths(include_paths)
         .unwrap_or_else(|error| panic!("failed to join include paths for cargo metadata: {error}"));
     println!("cargo:include={}", joined.to_string_lossy());
+}
+
+/// Decide which Zig `OptimizeMode` to pass to `zig build`.
+///
+/// The `LIBGHOSTTY_VT_SYS_OPTIMIZE` environment variable overrides this unconditionally; accepted
+/// values are the four Zig `OptimizeMode` names (`Debug`, `ReleaseSafe`, `ReleaseFast`,
+/// `ReleaseSmall`).
+///
+/// Defaults to `ReleaseFast` for optimized builds. If `DEBUG` is `true` (as cargo sets for the
+/// `dev` profile), `Debug` mode is used. Otherwise, if `OPT_LEVEL` is `s` or `z`, `ReleaseSmall`
+/// is used.
+fn zig_optimize_mode() -> &'static str {
+    if let Ok(override_mode) = env::var("LIBGHOSTTY_VT_SYS_OPTIMIZE") {
+        return match override_mode.as_str() {
+            "Debug" => "Debug",
+            "ReleaseSafe" => "ReleaseSafe",
+            "ReleaseFast" => "ReleaseFast",
+            "ReleaseSmall" => "ReleaseSmall",
+            other => panic!(
+                "LIBGHOSTTY_VT_SYS_OPTIMIZE must be one of Debug, ReleaseSafe, ReleaseFast, ReleaseSmall (got '{other}')"
+            ),
+        };
+    }
+
+    if env::var("DEBUG").as_deref() == Ok("true") {
+        return "Debug";
+    }
+
+    match env::var("OPT_LEVEL").as_deref() {
+        Ok("s") | Ok("z") => "ReleaseSmall",
+        _ => "ReleaseFast",
+    }
 }
 
 /// Clone ghostty at the pinned commit into OUT_DIR/ghostty-src.

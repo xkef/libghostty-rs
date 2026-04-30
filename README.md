@@ -62,6 +62,11 @@ checkout instead. Package managers that need network-free builds can also set
 to `zig build --system` so Zig does not download package dependencies during
 the Cargo build script.
 
+Vendored builds derive Zig's optimize mode from Cargo's profile: dev builds use
+`Debug`, size-optimized builds use `ReleaseSmall`, and other release builds use
+`ReleaseFast`. Set `LIBGHOSTTY_VT_SYS_OPTIMIZE` to `Debug`, `ReleaseSafe`,
+`ReleaseFast`, or `ReleaseSmall` to override that choice explicitly.
+
 The `pkg-config` path is opt-in. If you enable `libghostty-vt-sys/pkg-config`,
 the build will prefer an installed `libghostty-vt` discovered through
 `pkg-config` when `GHOSTTY_SOURCE_DIR` is unset. libghostty-vt is pre-1.0, so
