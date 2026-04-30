@@ -997,14 +997,14 @@ macro_rules! handlers {
                 $(for<$lf>)? FnMut(
                     &$($lf)? $crate::terminal::Terminal<'alloc, 'cb>,
                     $($fty),*
-                ) $(-> $rty)? + 'cb {}
+                ) $(-> $rty)? + Send + 'cb {}
 
             impl<'alloc, 'cb, F> $fnty<'alloc, 'cb> for F
             where
                 F: $(for<$lf>)? FnMut(
                     &$($lf)? $crate::terminal::Terminal<'alloc, 'cb>,
                     $($fty),*
-                ) $(-> $rty)? + 'cb
+                ) $(-> $rty)? + Send + 'cb
             {}
         )*
 
@@ -1027,6 +1027,12 @@ macro_rules! handlers {
         }
     };
 }
+
+// SAFETY: A terminal created with static allocator and callback lifetimes owns
+// its opaque libghostty handle and stores only Send callbacks in its vtable.
+// This permits transferring the whole terminal to a new owner thread, but does
+// not make concurrent access sound; `Terminal` remains `!Sync`.
+unsafe impl Send for Terminal<'static, 'static> {}
 
 handlers! {
     /// Call the given function when the terminal needs to write data back
@@ -1153,12 +1159,14 @@ handlers! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
     use std::mem::ManuallyDrop;
-    use std::rc::Rc;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     #[inline(never)]
-    fn build_terminal(callback_count: Rc<Cell<usize>>) -> Terminal<'static, 'static> {
+    fn build_terminal(callback_count: Arc<AtomicUsize>) -> Terminal<'static, 'static> {
         let mut terminal = Terminal::new(Options {
             cols: 80,
             rows: 24,
@@ -1168,7 +1176,7 @@ mod tests {
 
         terminal
             .on_device_attributes(move |_term| {
-                callback_count.set(callback_count.get() + 1);
+                callback_count.fetch_add(1, Ordering::Relaxed);
                 Some(DeviceAttributes {
                     primary: PrimaryDeviceAttributes::new(
                         ConformanceLevel::VT220,
@@ -1231,13 +1239,20 @@ mod tests {
     /// callback still fires through the stable VTable userdata pointer.
     #[test]
     fn callbacks_survive_explicit_relocation() {
-        let callback_count = Rc::new(Cell::new(0usize));
+        let callback_count = Arc::new(AtomicUsize::new(0));
         let terminal = build_terminal(callback_count.clone());
         let (mut terminal, addr_before, addr_after) = relocate_into_new_box(terminal);
         assert_ne!(addr_before, addr_after);
 
         // Primary DA request (CSI c) should invoke on_device_attributes.
         terminal.vt_write(b"\x1b[c");
-        assert_eq!(callback_count.get(), 1);
+        assert_eq!(callback_count.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn terminal_is_send() {
+        fn assert_send<T: Send>() {}
+
+        assert_send::<Terminal<'static, 'static>>();
     }
 }

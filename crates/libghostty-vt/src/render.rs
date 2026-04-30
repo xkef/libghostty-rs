@@ -220,6 +220,11 @@ use crate::{
 #[derive(Debug)]
 pub struct RenderState<'alloc>(Object<'alloc, ffi::RenderStateImpl>);
 
+// SAFETY: A render state with a static allocator lifetime owns its opaque
+// libghostty handle. Moving that owner to another thread is sound, but
+// concurrent access is not; `RenderState` remains `!Sync`.
+unsafe impl Send for RenderState<'static> {}
+
 /// A snapshot of the render state after an update.
 ///
 /// This struct exists to guard data accessed from the render state from

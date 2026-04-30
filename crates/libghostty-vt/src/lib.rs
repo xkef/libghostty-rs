@@ -18,9 +18,11 @@
 //!
 //! # Thread safety
 //!
-//! All `libghostty-vt` objects are **not** thread-safe, and have been marked
-//! `!Send + !Sync` accordingly. The expectation is for them to be managed
-//! by a single thread, that may communicate with other threads via channels.
+//! `libghostty-vt` objects are **not** thread-safe and are generally `!Sync`.
+//! Some owning handles with `'static` allocator/callback lifetimes are `Send`,
+//! so they may be moved to a different owner thread before use. They must still
+//! be managed by one thread at a time, communicating with other threads via
+//! channels or other synchronization owned by the embedding application.
 #![warn(clippy::pedantic)]
 #![warn(missing_docs)]
 #![warn(missing_debug_implementations)]
